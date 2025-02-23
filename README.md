@@ -39,6 +39,20 @@ source venv/bin/activate  # On Windows use: venv\Scripts\activate
 ```sh
 pip install -r requirements.txt
 ```
+### Obtain API Keys
+To fetch weather data, you need to obtain API keys from the following providers:
+
+1. **WeatherAPI**
+   - Register at [https://www.weatherapi.com/](https://www.weatherapi.com/)
+   - Sign up and navigate to the API section
+   - Generate a free API key and copy it
+
+2. **Weatherbit**
+   - Register at [https://www.weatherbit.io/](https://www.weatherbit.io/)
+   - Create an account and go to the API section
+   - Obtain an API key for free-tier access
+
+Once you have the keys, add them to the `.env` file as shown below.
 
 ### Set Up Environment Variables
 Create a `.env` file and configure your API keys and Redis settings:
