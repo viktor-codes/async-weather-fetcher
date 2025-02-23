@@ -1,0 +1,17 @@
+[
+    {
+        "city": "Paris",
+        "temperature": 11.2,
+        "description": "Clear"
+    },
+    {
+        "city": "Kyiv",
+        "temperature": -7.5,
+        "description": "Clear"
+    },
+    {
+        "city": "London",
+        "temperature": 10.3,
+        "description": "Overcast"
+    }
+]
