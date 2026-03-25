@@ -8,7 +8,7 @@ class MockResponse:
         self.text = str(payload)
 
     def raise_for_status(self) -> None:
-        # В наших тестах статус успешный, поэтому всегда pass.
+        # In these tests the HTTP response is always successful, so always pass.
         return None
 
     def json(self) -> dict:

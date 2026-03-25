@@ -16,7 +16,7 @@ class FakeRedis:
 
 
 def sanitize_results_for_test(task_id: str, results_by_region: dict) -> dict:
-    # Мы хотим тестировать контракт API, поэтому без записи на диск.
+    # Contract test only: no writes to disk.
     sanitized = {}
     for region, cities_data in results_by_region.items():
         sanitized[region] = [
@@ -47,7 +47,7 @@ def test_post_weather_then_get_task_status_completed(mocker):
     )
 
     def fake_delay(cities, task_id):
-        # В процессе теста выполняем "таск" синхронно.
+        # Run the task synchronously inside the test.
         return process_weather_data.run(cities, task_id)
 
     mocker.patch(

@@ -75,7 +75,7 @@ def get_weather_data(city: str, provider_name: str = None):
 
 
 def normalize_input_cities(cities: list[str]) -> list[str]:
-    """Нормализуем входные названия городов, чтобы провайдерам было проще."""
+    """Normalize input city names so providers receive consistent strings."""
     return [normalize_city(city) for city in cities]
 
 
@@ -83,8 +83,8 @@ def collect_weather_by_region(
     normalized_cities: list[str],
 ) -> tuple[dict[str, list[dict]], bool]:
     """
-    Собираем погоду и группируем по region.
-    Возвращаем (results_by_region, valid_data_found).
+    Fetch weather and group results by region.
+    Returns (results_by_region, valid_data_found).
     """
     results: dict[str, list[dict]] = {}
     valid_data_found = False
@@ -109,7 +109,7 @@ def collect_weather_by_region(
 
 
 def mark_task_completed(task_id: str, results_by_region: dict[str, list[dict]]) -> None:
-    """Сохраняем файлы и кладем в Redis единый статус completed."""
+    """Persist files and set a single Redis status to completed."""
     sanitized_results = save_results_to_files(task_id, results_by_region)
     redis_client.set(
         task_id, json.dumps({"status": "completed", "results": sanitized_results})
@@ -120,7 +120,7 @@ def mark_task_completed(task_id: str, results_by_region: dict[str, list[dict]]) 
 
 
 def mark_task_failed(task_id: str, reason: str | None = None) -> None:
-    """Кладем в Redis статус failed."""
+    """Set Redis status to failed."""
     reason_msg = reason or "No valid weather data found."
     logger.warning(f"Task ID {task_id} failed: {reason_msg}")
     redis_client.set(task_id, json.dumps({"status": "failed", "results": {}}))
@@ -155,7 +155,7 @@ def process_weather_data(self, cities, task_id):
             f"Task {task_id} failed: No valid weather data found."
         )
     except Exception as e:
-        # На любом сбое делаем best-effort "failed", чтобы API мог показать причину.
+        # On any failure, best-effort mark as failed so the API can surface the reason.
         mark_task_failed(task_id, reason=str(e))
         logger.error(f"Task {task_id} crashed: {str(e)}")
         raise
