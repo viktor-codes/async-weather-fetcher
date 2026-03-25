@@ -1,6 +1,14 @@
 # Asynchronous Weather Data Processing System
 
-This project is a FastAPI-based asynchronous weather data processing system using Celery, Redis, and external APIs. It processes weather data for user-specified cities, normalizes city names, handles API failures, and stores results regionally.
+FastAPI API, которое принимает список городов и запускает обработку в фоне через Celery.
+Результаты сохраняются по регионам в `weather_data/<region>/task_<task_id>.json`, а статус задачи хранится в Redis.
+
+## Как “для первоклассника”
+
+- FastAPI = “почтовое отделение”: принимает письмо (HTTP запрос).
+- Celery worker = “работник”: берет письмо и делает работу (ходит за погодой в интернет).
+- Redis = “табличка на стене”: там написано, готово или нет (и какие результаты).
+- `weather_data/` = “папка с готовыми ответами”.
 
 ## Features
 
@@ -18,7 +26,7 @@ This project is a FastAPI-based asynchronous weather data processing system usin
 ### Prerequisites
 Ensure you have the following installed:
 
-- Python 3.8+
+- Python 3.12+ (рекомендуется)
 - Redis (for task tracking)
 - Docker (optional, for running Redis)
 - pip, virtualenv
@@ -75,6 +83,40 @@ DEFAULT_WEATHER_PROVIDER=weatherbit
 
 ## Running the Application
 
+### 1) Start Redis
+If Redis is not running, start it using Docker:
+```sh
+docker run -d -p 6379:6379 redis
+```
+Or, if installed locally:
+```sh
+redis-server
+```
+
+### 2) Start Celery Worker
+```sh
+celery -A app.core.celery_app worker --loglevel=info
+```
+
+### 3) Start the FastAPI Server
+```sh
+uvicorn app.main:app --reload
+```
+The API will now be available at `http://127.0.0.1:8000`.
+
+## Architecture (short)
+
+```mermaid
+graph TD
+  Client[Client] -->|POST /weather| ApiWeather[FastAPI]
+  ApiWeather -->|delay(task_id)| CeleryTask[Celery task]
+  CeleryTask -->|HTTP| Providers[Weather providers]
+  CeleryTask -->|status/results| Redis[Redis]
+  CeleryTask -->|save files| Files[weather_data/<region>/task_<task_id>.json]
+  Client -->|GET /tasks/{task_id}| Redis
+  Client -->|GET /results/{region}| Files
+```
+
 ### Start Redis
 If Redis is not running, start it using Docker:
 ```sh
@@ -113,6 +155,8 @@ Response:
   "status": "running"
 }
 ```
+
+Important: This endpoint only *starts* the job. The work is done by the Celery worker.
 
 ### Check Task Status
 #### `GET /tasks/{task_id}`
@@ -156,8 +200,22 @@ async-weather-fetcher/
 │   ├── utils/            # Utility functions (logging, file handling)
 │   ├── schemas/          # Data validation (Pydantic)
 │   ├── main.py           # Entry point for FastAPI
+│── tests/                # Unit/integration tests (pytest)
 │── weather_data/         # Stores processed weather data
 │── .env                  # Environment variables (ignored in .gitignore)
 │── requirements.txt      # Dependencies
 │── README.md             # Project documentation
 ```
+
+## Development
+
+### Run tests
+```sh
+./venv/bin/python -m pytest
+```
+
+### CI
+GitHub Actions runs:
+- `flake8 app tests`
+- `black --check app tests`
+- `pytest`

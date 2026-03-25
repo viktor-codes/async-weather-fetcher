@@ -5,6 +5,7 @@ celery = Celery(
     "weather_tasks",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
+    include=["app.services.weather_service"],
 )
 
 celery.conf.update(task_track_started=True)

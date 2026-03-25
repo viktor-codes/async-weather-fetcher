@@ -74,23 +74,19 @@ def get_weather_data(city: str, provider_name: str = None):
     return None
 
 
-@celery.task(bind=True)
-@retry(
-    max_retries=3,
-    initial_delay=2,
-    backoff_factor=2,
-    exceptions=(httpx.RequestError,)
-)
-def process_weather_data(self, cities, task_id):
-    """
-    Celery background task to fetch and validate weather data for cities.
-    If all providers fail, the task will not save incomplete data.
-    """
-    logger.info(f"Starting weather data processing for Task ID: {task_id}")
+def normalize_input_cities(cities: list[str]) -> list[str]:
+    """Нормализуем входные названия городов, чтобы провайдерам было проще."""
+    return [normalize_city(city) for city in cities]
 
-    # Normalize city names
-    normalized_cities = [normalize_city(city) for city in cities]
-    results = {}
+
+def collect_weather_by_region(
+    normalized_cities: list[str],
+) -> tuple[dict[str, list[dict]], bool]:
+    """
+    Собираем погоду и группируем по region.
+    Возвращаем (results_by_region, valid_data_found).
+    """
+    results: dict[str, list[dict]] = {}
     valid_data_found = False
 
     for city in normalized_cities:
@@ -100,35 +96,66 @@ def process_weather_data(self, cities, task_id):
             logger.warning(f"Skipping {city} due to missing weather data.")
             continue
 
-        # Ensure 'country' key exists
         country = weather_data.get("country")
         if not country:
             logger.warning(f"Skipping {city} due to missing 'country' field.")
             continue
 
-        # Get region mapping
         region = get_region_for_country(country)
-        if region not in results:
-            results[region] = []
-        results[region].append(weather_data)
+        results.setdefault(region, []).append(weather_data)
         valid_data_found = True
 
-    if valid_data_found:
-        save_results_to_files(task_id, results)
-        redis_client.set(
-            task_id, json.dumps({"status": "completed", "results": results})
-        )
-        logger.info(
-            f"Task ID {task_id} processing completed and stored in Redis."
-        )
-    else:
-        logger.warning(
-            f"No valid weather data found for Task ID: "
-            f"{task_id}. Task will be marked as failed."
-        )
-        redis_client.set(
-            task_id, json.dumps({"status": "failed", "results": {}})
+    return results, valid_data_found
+
+
+def mark_task_completed(task_id: str, results_by_region: dict[str, list[dict]]) -> None:
+    """Сохраняем файлы и кладем в Redis единый статус completed."""
+    sanitized_results = save_results_to_files(task_id, results_by_region)
+    redis_client.set(
+        task_id, json.dumps({"status": "completed", "results": sanitized_results})
+    )
+    logger.info(
+        f"Task ID {task_id} processing completed and stored in Redis."
+    )
+
+
+def mark_task_failed(task_id: str, reason: str | None = None) -> None:
+    """Кладем в Redis статус failed."""
+    reason_msg = reason or "No valid weather data found."
+    logger.warning(f"Task ID {task_id} failed: {reason_msg}")
+    redis_client.set(task_id, json.dumps({"status": "failed", "results": {}}))
+
+
+@celery.task(bind=True)
+@retry(
+    max_retries=3,
+    initial_delay=2,
+    backoff_factor=2,
+    exceptions=(Exception,)
+)
+def process_weather_data(self, cities, task_id):
+    """
+    Celery background task to fetch and validate weather data for cities.
+    If all providers fail, the task will not save incomplete data.
+    """
+    logger.info(f"Starting weather data processing for Task ID: {task_id}")
+
+    try:
+        normalized_cities = normalize_input_cities(cities)
+        results_by_region, valid_data_found = collect_weather_by_region(
+            normalized_cities
         )
 
-        # Raise an exception to mark the task as failed
-        raise Exception(f"Task {task_id} failed: No valid weather data found.")
+        if valid_data_found:
+            mark_task_completed(task_id, results_by_region)
+            return
+
+        mark_task_failed(task_id, reason="No valid weather data found.")
+        raise Exception(
+            f"Task {task_id} failed: No valid weather data found."
+        )
+    except Exception as e:
+        # На любом сбое делаем best-effort "failed", чтобы API мог показать причину.
+        mark_task_failed(task_id, reason=str(e))
+        logger.error(f"Task {task_id} crashed: {str(e)}")
+        raise

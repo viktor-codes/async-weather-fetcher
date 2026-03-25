@@ -104,3 +104,9 @@ venv.bak/
 .mypy_cache/
 
 .idea/
+
+# macOS
+.DS_Store
+
+# Runtime artifacts (generated weather results)
+weather_data/

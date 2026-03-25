@@ -14,6 +14,8 @@ def save_results_to_files(task_id, results):
             logger.info(f"Creating directory: {WEATHER_DATA_DIR}")
             os.makedirs(WEATHER_DATA_DIR, exist_ok=True)
 
+        sanitized_results = {}
+
         for region, cities_data in results.items():
             region_dir = os.path.join(WEATHER_DATA_DIR, region)
 
@@ -28,11 +30,14 @@ def save_results_to_files(task_id, results):
                 {k: v for k, v in city_data.items() if k != "country"}
                 for city_data in cities_data
             ]
+            sanitized_results[region] = sanitized_data
 
             with open(file_path, "w", encoding="utf-8") as file:
                 json.dump(sanitized_data, file, indent=4, ensure_ascii=False)
 
         logger.info(f"Weather data saved successfully for task {task_id}")
+        return sanitized_results
 
     except Exception as e:
         logger.error(f"Failed to save weather data: {str(e)}")
+        raise

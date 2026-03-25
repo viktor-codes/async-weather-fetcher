@@ -1,6 +1,7 @@
 import httpx
 from app.utils.logger import logger
 from app.utils.redis_client import log_api_failure
+from app.utils.retry import retry
 
 
 class WeatherProvider:
@@ -17,25 +18,33 @@ class WeatherProvider:
         )
 
     def _make_request(self, params):
-        """Handles the HTTP request and error logging synchronously."""
+        """Synchronous HTTP request with retry for transient network errors."""
         try:
-            response = httpx.get(self.api_url, params=params, timeout=10)
-            response.raise_for_status()
-            return response.json()
+            return self._request_with_retry(params)
         except httpx.RequestError as e:
             error_message = str(e)
             logger.error(
-                f"Failed to fetch weather data from "
-                f"{self.api_url}: {error_message}"
+                f"Failed to fetch weather data from {self.api_url}: {error_message}"
             )
 
-            # Log the failure in Redis
+            # Log the failure in Redis after retries are exhausted.
             log_api_failure(
                 params.get("q") or params.get("city"),
-                self.api_url, error_message
+                self.api_url,
+                error_message,
             )
-
             return None
+
+    @retry(
+        max_retries=3,
+        initial_delay=1,
+        backoff_factor=2,
+        exceptions=(httpx.RequestError,),
+    )
+    def _request_with_retry(self, params):
+        response = httpx.get(self.api_url, params=params, timeout=10)
+        response.raise_for_status()
+        return response.json()
 
 
 class WeatherAPIProvider(WeatherProvider):
